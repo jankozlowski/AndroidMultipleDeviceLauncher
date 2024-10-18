@@ -1,0 +1,139 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+	<!--  This is the file that defines the actual layout and type of the commands.
+        It is divided in different sections (e.g. command definition, command
+        placement, ...), with each defining a specific set of properties.
+        See the comment before each section for more details about how to
+        use it. -->
+
+	<!--  The VSCT compiler (the tool that translates this file into the binary
+        format that VisualStudio will consume) has the ability to run a preprocessor
+        on the vsct file; this preprocessor is (usually) the C++ preprocessor, so
+        it is possible to define includes and macros with the same syntax used
+        in C++ files. Using this ability of the compiler here, we include some files
+        defining some of the constants that we will use inside the file. -->
+
+	<!--This is the file that defines the IDs for all the commands exposed by VisualStudio. -->
+	<Extern href="stdidcmd.h" />
+
+	<!--This header contains the command ids for the menus provided by the shell. -->
+	<Extern href="vsshlids.h" />
+
+	<!--The Commands section is where commands, menus, and menu groups are defined.
+      This section uses a Guid to identify the package that provides the command defined inside it. -->
+	<Commands package="guidAndroidMultipleDeviceLauncherPackage">
+		<!-- Inside this section we have different sub-sections: one for the menus, another
+    for the menu groups, one for the buttons (the actual commands), one for the combos
+    and the last one for the bitmaps used. Each element is identified by a command id that
+    is a unique pair of guid and numeric identifier; the guid part of the identifier is usually
+    called "command set" and is used to group different command inside a logically related
+    group; your package should define its own command set in order to avoid collisions
+    with command ids defined by other packages. -->
+
+		<!-- In this section you can define new menu groups. A menu group is a container for
+         other menus or buttons (commands); from a visual point of view you can see the
+         group as the part of a menu contained between two lines. The parent of a group
+         must be a menu. -->
+		<Groups>
+			<Group guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="MenuGroup" priority="0x0600">
+				<Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS" />
+			</Group>
+
+			<Group guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="ToolbarGroup" priority="0x0000">
+				<Parent guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="Toolbar" />
+			</Group>
+		</Groups>
+
+		<Menus>
+			<Menu guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="Toolbar" type="Toolbar">
+				<Strings>
+					<ButtonText>Run Multiple Devices</ButtonText>
+				</Strings>
+			</Menu>
+		</Menus>
+
+		<!--Buttons section. -->
+		<!--This section defines the elements the user can interact with, like a menu command or a button
+        or combo box in a toolbar. -->
+		<Buttons>
+			<!--To define a menu group you have to specify its ID, the parent menu and its display priority.
+          The command is visible and enabled by default. If you need to change the visibility, status, etc, you can use
+          the CommandFlag node.
+          You can add more than one CommandFlag node e.g.:
+              <CommandFlag>DefaultInvisible</CommandFlag>
+              <CommandFlag>DynamicVisibility</CommandFlag>
+          If you do not want an image next to your command, remove the Icon node /> -->
+			<Button guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="RunMultipleDevicesCommandId" priority="0x0100" type="Button">
+				<Parent guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="ToolbarGroup" />
+				<Icon guid="playImages" id="play" />
+				<Strings>
+					<ButtonText>Run Multiple Devices</ButtonText>
+					<CommandName>Run Multiple Devices</CommandName>
+					<MenuText>Run Multiple Devices</MenuText>
+					<ToolTipText>Run Multiple Devices</ToolTipText>
+					<CanonicalName>Run Multiple Devices</CanonicalName>
+				</Strings>
+
+			</Button>
+
+			<Button guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="RunMultipleDevicesLabel" priority="0x0100" type="Button">
+				<Parent guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="ToolbarGroup" />
+				<Strings>
+					<ButtonText>Run Multiple Devices</ButtonText>
+					<CommandName>Run Multiple Devices</CommandName>
+					<MenuText>Run Multiple Devices</MenuText>
+					<ToolTipText>Run Multiple Devices</ToolTipText>
+					<CanonicalName>Run Multiple Devices</CanonicalName>
+				</Strings>
+
+			</Button>
+
+			<Button guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="cmdidRunMultipleDevicesSettingsCommand" priority="0x0100" type="Button">
+				<Parent guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="ToolbarGroup" />
+				<Icon guid="settingsImages" id="sliders" />
+				<Strings>
+					<ButtonText>Settings</ButtonText>
+				</Strings>
+			</Button>
+
+		</Buttons>
+
+		<!--The bitmaps section is used to define the bitmaps that are used for the commands.-->
+		<Bitmaps>
+			<!--  The bitmap id is defined in a way that is a little bit different from the others:
+            the declaration starts with a guid for the bitmap strip, then there is the resource id of the
+            bitmap strip containing the bitmaps and then there are the numeric ids of the elements used
+            inside a button definition. An important aspect of this declaration is that the element id
+            must be the actual index (1-based) of the bitmap inside the bitmap strip. -->
+			<Bitmap guid="playImages" href="Resources\PlayIcon.png" usedList="play" />
+			<Bitmap guid="settingsImages" href="Resources\SlidersIcon.png" usedList="sliders" />
+
+		</Bitmaps>
+	</Commands>
+
+	<Symbols>
+		<!-- This is the package guid. -->
+		<GuidSymbol name="guidAndroidMultipleDeviceLauncherPackage" value="{2c1e8968-b9db-4335-bc7b-13be80d47c19}" />
+
+		<!-- This is the guid used to group the menu commands together -->
+		<GuidSymbol name="guidAndroidMultipleDeviceLauncherPackageCmdSet" value="{7e48a3b2-e661-464b-9ac0-b56d87191a71}">
+			<IDSymbol name="Toolbar" value="0x1020" />
+			<IDSymbol name="MenuGroup" value="0x1030" />
+			<IDSymbol name="ToolbarGroup" value="0x1050" />
+			<IDSymbol name="RunMultipleDevicesCommandId" value="0x0100" />
+			<IDSymbol name="RunMultipleDevicesLabel" value="0x0300" />
+			<IDSymbol value="4178" name="cmdidRunMultipleDevicesSettingsCommand" />
+			<IDSymbol value="4179" name="cmdidDevicePickerCommand" />
+		</GuidSymbol>
+
+		<GuidSymbol value="{0119f95f-3d33-4943-9d87-462cd612a313}" name="playImages">
+			<IDSymbol name="play" value="1" />
+		</GuidSymbol>
+
+		<GuidSymbol value="{6CA89402-7B48-462A-BBF9-25F7E3305FF2}" name="settingsImages">
+			<IDSymbol name="sliders" value="1" />
+		</GuidSymbol>
+
+	</Symbols>
+</CommandTable>

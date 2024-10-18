@@ -1,0 +1,35 @@
+﻿<Window x:Class="AndroidMultipleDeviceLauncher.DevicePicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:AndroidMultipleDeviceLauncher"
+             xmlns:vsshell="clr-namespace:Microsoft.VisualStudio.Shell;assembly=Microsoft.VisualStudio.Shell.15.0"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"></RowDefinition>
+            <RowDefinition Height="50"></RowDefinition>
+        </Grid.RowDefinitions>
+        <ListView Grid.Row="0" Name="DeviceListView">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal" Margin="5">
+                        <CheckBox IsChecked="{Binding IsChecked}"/>
+                        <Image Source="{Binding TypeImage}"/>
+                        <TextBlock Text="{Binding Name}"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+        <Button Grid.Row="1" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Content="Refresh" Width="100" Height="25" Margin="20,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Content="Ok" Width="100" Height="25"  VerticalAlignment="Center"/>
+            <Viewbox Width="15"></Viewbox>
+            <Button Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Content="Cancel" Width="100" Height="25"  VerticalAlignment="Center"/>
+            <Viewbox Width="25"></Viewbox>
+        </StackPanel>
+    </Grid>
+</Window>
