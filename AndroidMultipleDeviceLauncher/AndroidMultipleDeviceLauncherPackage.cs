@@ -51,8 +51,13 @@ namespace AndroidMultipleDeviceLauncher
             await RunMultipleDevicesCommand.InitializeAsync(this);
             await RunMultipleDevicesSettingsCommand.InitializeAsync(this);
 
-            Adb.AdbPath = @"C:\Program Files (x86)\Android\android-sdk\platform-tools";
-            Avd.AvdPath = @"C:\Program Files (x86)\Android\android-sdk\emulator";
+            Settings settings = new Settings();
+
+            string adbPath = settings.GetSetting(Settings.SettingsName, "adbPath");
+            string avdPath = settings.GetSetting(Settings.SettingsName, "avdPath");
+
+            Adb.AdbPath = string.IsNullOrEmpty(adbPath) ? @"C:\Program Files (x86)\Android\android-sdk\platform-tools\" : adbPath;
+            Avd.AvdPath = string.IsNullOrEmpty(avdPath) ? @"C:\Program Files (x86)\Android\android-sdk\emulator\" : avdPath;
         }
 
         #endregion

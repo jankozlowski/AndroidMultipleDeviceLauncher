@@ -6,30 +6,80 @@
              xmlns:local="clr-namespace:AndroidMultipleDeviceLauncher"
              xmlns:vsshell="clr-namespace:Microsoft.VisualStudio.Shell;assembly=Microsoft.VisualStudio.Shell.15.0"
              mc:Ignorable="d" 
-             d:DesignHeight="450" d:DesignWidth="800">
+             Title="Select Multiple Devices"
+             Height="400" 
+             Width="500"
+             WindowStartupLocation="CenterScreen"
+             Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}"
+             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}">
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"></RowDefinition>
+            <RowDefinition Height="Auto"></RowDefinition>
             <RowDefinition Height="*"></RowDefinition>
             <RowDefinition Height="50"></RowDefinition>
         </Grid.RowDefinitions>
-        <ListView Grid.Row="0" Name="DeviceListView">
+
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="45" />
+            <ColumnDefinition Width="55" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Row="0" Grid.ColumnSpan="3">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"></RowDefinition>
+                <RowDefinition Height="Auto"></RowDefinition>
+            </Grid.RowDefinitions>
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock x:Name="labelAdbPath" Padding="10" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" TextAlignment="Center" HorizontalAlignment="Center" Text="Adb path:"></TextBlock>
+            <TextBox x:Name="AdbPathBox" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.TextBoxStyleKey}}" Grid.Row="0" Grid.Column="1"  VerticalContentAlignment="Center" Text="C:\Program Files (x86)\Android\android-sdk\platform-tools\" TextChanged="AdbPathTextChanged"></TextBox>
+            <Button x:Name="checkAdb" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Grid.Row="0" Grid.Column="2" Content="Check" Click="CheckAdbClick" />
+
+            <TextBlock x:Name="labelAvdPath" Padding="10" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" TextAlignment="Center" HorizontalAlignment="Center" Text="Avd path:"></TextBlock>
+            <TextBox x:Name="AvdPathBox" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.TextBoxStyleKey}}" Grid.Row="1" Grid.Column="1"  VerticalContentAlignment="Center" Text="C:\Program Files (x86)\Android\android-sdk\emulator\" TextChanged="AvdPathTextChanged"></TextBox>
+            <Button x:Name="checkAvd" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Grid.Row="1" Grid.Column="2" Content="Check" Click="CheckAvdClick" />
+        </Grid>
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="" HorizontalAlignment="Left"/>
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="Type" HorizontalAlignment="Center"/>
+        <TextBlock Grid.Row="1" Grid.Column="2" Text="Device" HorizontalAlignment="Left"/>
+
+        <ListView Background="{DynamicResource {x:Static vsshell:VsBrushes.WindowKey}}" Foreground="{DynamicResource {x:Static vsshell:VsBrushes.WindowTextKey}}" 
+            Grid.Row="2" Grid.ColumnSpan="3" Name="DeviceListView">
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <StackPanel Orientation="Horizontal" Margin="5">
-                        <CheckBox IsChecked="{Binding IsChecked}"/>
-                        <Image Source="{Binding TypeImage}"/>
-                        <TextBlock Text="{Binding Name}"/>
-                    </StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="45" />
+                            <ColumnDefinition Width="55" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <CheckBox Grid.Column="0" VerticalContentAlignment="Center" HorizontalAlignment="Center" IsChecked="{Binding IsChecked}"/>
+                        <Image Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Width="16" Height="16" Source="{Binding TypeImage}"/>
+                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="{Binding Name}"/>
+                    </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
-        <Button Grid.Row="1" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Content="Refresh" Width="100" Height="25" Margin="20,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"/>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Content="Ok" Width="100" Height="25"  VerticalAlignment="Center"/>
-            <Viewbox Width="15"></Viewbox>
-            <Button Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Content="Cancel" Width="100" Height="25"  VerticalAlignment="Center"/>
-            <Viewbox Width="25"></Viewbox>
-        </StackPanel>
+        <Grid Grid.Row="3" Grid.ColumnSpan="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Click="RefreshButtonClick" Content="Refresh" Width="100" Height="25" Margin="15,0,0,0" VerticalAlignment="Center"/>
+            <Button Grid.Column="2" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Click="OkButtonClick" Content="Ok" Width="100" Height="25" Margin="0,0,15,0" VerticalAlignment="Center"/>
+            <Button Grid.Column="3" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Click="CancelButtonClick" Content="Cancel" Width="100" Height="25" Margin="0,0,15,0" VerticalAlignment="Center"/>
+        </Grid>
     </Grid>
 </Window>

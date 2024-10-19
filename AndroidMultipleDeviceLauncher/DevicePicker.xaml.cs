@@ -2,9 +2,11 @@
 using System.Collections.Generic;
 using System;
 using System.Windows;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Linq;
+using System.IO;
+using System.Windows.Controls;
+using AndroidMultipleDeviceLauncher.Models;
 
 namespace AndroidMultipleDeviceLauncher
 {
@@ -12,18 +14,37 @@ namespace AndroidMultipleDeviceLauncher
     {
         private readonly Adb Adb;
         private readonly Avd Avd;
+        private readonly Settings Settings;
 
         public DevicePicker()
         {
             InitializeComponent();
             Adb = new Adb();
             Avd = new Avd();
+            Settings = new Settings();
 
+            LoadSettings();
+            LoadData();
+        }
+
+        public void LoadData()
+        {
             List<Device> connectedRealDevices = GetConnectedRealDevices();
             List<Device> avdEmulators = GetAvdEmulators();
             List<Device> devices = connectedRealDevices.Concat(avdEmulators).ToList();
 
             DeviceListView.ItemsSource = devices;
+        }
+
+        private void LoadSettings()
+        {
+            string adbPath = Settings.GetSetting(Settings.SettingsName, "adbPath");
+            if (!string.IsNullOrEmpty(adbPath))
+                AdbPathBox.Text = adbPath;
+
+            string avdPath = Settings.GetSetting(Settings.SettingsName, "avdPath");
+            if (!string.IsNullOrEmpty(avdPath))
+                AvdPathBox.Text = avdPath;
         }
 
         private List<Device> GetAvdEmulators()
@@ -41,7 +62,8 @@ namespace AndroidMultipleDeviceLauncher
                 Device device = new Device
                 {
                     Name = line,
-                    TypeImage = new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/Desktop.png"))
+                    TypeImage = new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/Desktop.png")),
+                    IsEmulator = true
                 };
                 devices.Add(device);
             }
@@ -105,15 +127,68 @@ namespace AndroidMultipleDeviceLauncher
             return lines;
         }
 
-        private class Device
+        private void CheckAdbClick(object sender, RoutedEventArgs e)
         {
-            public bool IsChecked { get; set; }
+            string adbPath = Path.Combine(AdbPathBox.Text, "adb.exe");
+            bool adbExists = File.Exists(adbPath);
+            if (adbExists)
+            {
+                MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, "Adb found at given path"), "Adb found");
+            }
+            else
+            {
+                MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, "Adb not found at given path. Check if path is correct and contains adb.exe"), "Adb not found");
+            }
+        }
 
-            public ImageSource TypeImage { get; set; }
+        private void CheckAvdClick(object sender, RoutedEventArgs e)
+        {
+            string avdPath = Path.Combine(AvdPathBox.Text, "emulator.exe");
+            bool avdExists = File.Exists(avdPath);
+            if (avdExists)
+            {
+                MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, "Avd found at given path"), "Avd found");
+            }
+            else
+            {
+                MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, "Avd not found at given path. Check if path is correct and contains emulator.exe"), "Avd not found");
+            }
+        }
 
-            public string Name { get; set; }
+        private void AdbPathTextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (Adb == null)
+                return;
 
-            public string Id { get; set; }
+            Adb.AdbPath = ((TextBox)e.Source).Text;
+        }
+
+        private void AvdPathTextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (Avd == null)
+                return;
+
+            Avd.AvdPath = ((TextBox)e.Source).Text;
+        }
+
+        private void RefreshButtonClick(object sender, RoutedEventArgs e)
+        {
+            LoadData();
+        }
+
+        private void OkButtonClick(object sender, RoutedEventArgs e)
+        {
+            Settings.SaveSetting(Settings.SettingsName, "adbPath", AdbPathBox.Text);
+            Settings.SaveSetting(Settings.SettingsName, "avdPath", AvdPathBox.Text);
+
+            List<Device> selectedDevices = DeviceListView.Items.Cast<Device>().Where(d => d.IsChecked).ToList();
+            SelectedDevicesSingelton.GetInstance().SelectedDevices = selectedDevices;
+            Close();
+        }
+
+        private void CancelButtonClick(object sender, RoutedEventArgs e)
+        {
+            Close();
         }
     }
 }
