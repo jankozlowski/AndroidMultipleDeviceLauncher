@@ -1,4 +1,5 @@
 ﻿using AndroidMultipleDeviceLauncher.Services;
+using Microsoft.Build.Locator;
 using Microsoft.VisualStudio.Shell;
 using System;
 using System.Runtime.InteropServices;

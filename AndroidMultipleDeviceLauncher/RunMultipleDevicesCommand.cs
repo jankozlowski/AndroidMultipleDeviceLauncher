@@ -1,10 +1,31 @@
-﻿using Microsoft.VisualStudio.Shell;
+﻿using AndroidMultipleDeviceLauncher.Models;
+using AndroidMultipleDeviceLauncher.Services;
+using EnvDTE;
+using EnvDTE80;
+using Microsoft.Build.Evaluation;
+using Microsoft.Build.Execution;
+using Microsoft.Build.Framework;
+using Microsoft.Build.Locator;
+using Microsoft.Build.Logging;
+using Microsoft.VisualStudio;
+using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Forms;
+using System.Windows.Threading;
+using VSLangProj;
 using Task = System.Threading.Tasks.Task;
 
 namespace AndroidMultipleDeviceLauncher
@@ -86,20 +107,279 @@ namespace AndroidMultipleDeviceLauncher
         /// </summary>
         /// <param name="sender">Event sender.</param>
         /// <param name="e">Event args.</param>
+
+        Adb adb = new Adb();
+        Avd avd = new Avd();
+
         private void Execute(object sender, EventArgs e)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
-            string message = string.Format(CultureInfo.CurrentCulture, "Inside {0}.MenuItemCallback()", this.GetType().FullName);
-            string title = "RunMultipleDevicesCommand";
+            List<Device> selectedDevices = SelectedDevicesSingelton.GetInstance().SelectedDevices;
 
-            // Show a message box to prove we were here
-            VsShellUtilities.ShowMessageBox(
-                this.package,
-                message,
-                title,
-                OLEMSGICON.OLEMSGICON_INFO,
-                OLEMSGBUTTON.OLEMSGBUTTON_OK,
-                OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+            if (selectedDevices == null || selectedDevices.Count == 0)
+            {
+                string message = "No device selected";
+                System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, message), "No device", MessageBoxButton.OK);
+
+                return;
+            }
+
+            //add loading
+
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                List<Device> runingDevices = adb.GetConnectedDevices();
+                List<Device> allAvds = avd.GetAvdEmulators();
+
+                foreach (var device in selectedDevices)
+                {
+                    if (device.IsEmulator)
+                    {
+                        if (runingDevices.FirstOrDefault(d => d.Name.Equals(device.Name)) != null)
+                            continue;
+
+                        if (allAvds.FirstOrDefault(d => d.Name.Equals(device.Name)) != null)
+                        {
+                            avd.AvdCommand($"-avd {device.Name}"); //run avd
+                        }
+                        else
+                        {
+                            SelectedDevicesSingelton.GetInstance().SelectedDevices.Remove(device);
+                        }
+                    }
+
+                    if (!device.IsEmulator)
+                    {
+                        if (runingDevices.FirstOrDefault(d => d.Id == device.Id) != null)
+                            continue;
+
+                        SelectedDevicesSingelton.GetInstance().SelectedDevices.Remove(device);
+                    }
+                }
+
+                BuildSolution();
+
+                EnvDTE.Project project = GetActiveProject();
+
+                if (project == null)
+                {
+                    string message = $"No startup project found, set android project as startup project";
+                    MessageBoxResult result = System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, message), "No startup project found", MessageBoxButton.OK);
+                    return;
+                }
+
+                ProjectConfiguration configuration = GetProjectConfiguration(project);
+
+                CheckIfAllDevicesBooted();
+                InstallAppOnDevices(configuration.FullOutputPath);
+                // RunAppOnDevices();
+                //test on two themes
+            });
+
         }
+
+        private void CheckIfAllDevicesBooted()
+        {
+            bool AllBooted = true;
+            List<Device> devices = adb.GetConnectedDevices();
+
+            while (!AllBooted)
+            {
+                List<bool> results = new List<bool>();
+
+                foreach (Device device in devices)
+                {
+                    string bootStatus = adb.AdbCommandWithResult($"adb -s {device.Id} shell getprop sys.boot_completed");
+                    bool booted = bootStatus.Equals("1") ? true : false;
+                    results.Add(booted);
+                }
+
+                AllBooted = results.All(item => item);
+                System.Threading.Thread.Sleep(1000);
+            }
+        }
+
+        private void InstallAppOnDevices(string apkPath)
+        {
+            List<Device> devices = adb.GetConnectedDevices();
+            foreach (Device device in devices)
+            {
+                adb.AdbCommand($"adb -s {device.Id} install {apkPath}");
+            }
+        }
+
+        private void RunAppOnDevices()
+        {
+            List<Device> devices = adb.GetConnectedDevices();
+            foreach (Device device in devices)
+            {
+                adb.AdbCommand($"adb -s {device.Id}  shell am start -n < package_name >/< activity_name ");
+            }
+        }
+
+        private ProjectConfiguration GetProjectConfiguration(EnvDTE.Project project)
+        {
+            ConfigurationManager configManager = project.ConfigurationManager;
+            Configuration activeConfig = configManager.ActiveConfiguration;
+
+            string configuration = activeConfig.ConfigurationName;
+            string platform = activeConfig.PlatformName;
+            string outputPath = activeConfig.Properties.Item("OutputPath").Value.ToString();
+            string packageName = project.Properties.Item("PackageName").Value.ToString();
+
+            string projectPath = project.FullName.Substring(0, project.FullName.LastIndexOf("\\"));
+            string buildPath = Path.Combine(projectPath, outputPath);
+
+            var files = Directory.GetFiles(buildPath, "*.apk").OrderBy(s => s).ToList();
+            string fullPath = files.First();
+
+            ProjectConfiguration projectConfiguration = new ProjectConfiguration()
+            {
+                Configuration = configuration,
+                Platform = platform,
+                OutputPath = outputPath,
+                FullOutputPath = fullPath,
+                //package name
+                //activity name
+            };
+
+            return projectConfiguration;
+        }
+
+        private class ProjectConfiguration
+        {
+            public string Configuration { get; set; }
+            public string Platform { get; set; }
+
+            public string OutputPath { get; set; }
+
+            public string FullOutputPath { get; set; }
+
+        }
+
+        private bool BuildSolution()
+        {
+            string projectPath = GetCurrentSolution();
+
+            if (string.IsNullOrEmpty(projectPath))
+                return false;
+
+            var projectCollection = new ProjectCollection();
+            var globalProperties = projectCollection.GlobalProperties;
+
+            FileLogger fl = new FileLogger() { Parameters = @"logfile=C:\logs\log.txt" };
+
+
+            var buildRequest = new BuildRequestData(projectPath, globalProperties, null, new[] { "Build" }, null);
+            var buildParameters = new BuildParameters(projectCollection);
+            buildParameters.Loggers = new List<Microsoft.Build.Framework.ILogger> { fl }.AsEnumerable();
+
+            var buildResult = Microsoft.Build.Execution.BuildManager.DefaultBuildManager.Build(buildParameters, buildRequest);
+
+            if (buildResult.OverallResult == BuildResultCode.Success)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        public string GetCurrentSolution()
+        {
+            IVsSolution solution = (IVsSolution)Microsoft.VisualStudio.Shell.Package.GetGlobalService(typeof(IVsSolution));
+            solution.GetSolutionInfo(out string solutionDirectory, out string solutionName, out string solutionDirectory2);
+
+            return solutionName;
+        }
+
+        public EnvDTE.Project GetActiveProject()
+        {
+            // Get the required services
+            IVsMonitorSelection monitorSelection = (IVsMonitorSelection)Package.GetGlobalService(typeof(SVsShellMonitorSelection));
+            IntPtr hierarchyPtr = IntPtr.Zero;
+            IntPtr selectionContainerPtr = IntPtr.Zero;
+            IVsMultiItemSelect multiItemSelect = null;
+            uint itemid = VSConstants.VSITEMID_NIL;
+
+            try
+            {
+                // Get the current selection in Solution Explorer
+                if (monitorSelection.GetCurrentSelection(out hierarchyPtr, out itemid, out multiItemSelect, out selectionContainerPtr) == VSConstants.S_OK
+                    && itemid != VSConstants.VSITEMID_NIL
+                    && hierarchyPtr != IntPtr.Zero)
+                {
+                    IVsHierarchy hierarchy = Marshal.GetObjectForIUnknown(hierarchyPtr) as IVsHierarchy;
+
+                    if (hierarchy != null)
+                    {
+                        // Get the DTE object, which represents Visual Studio's automation model
+                        DTE dte = (DTE)Package.GetGlobalService(typeof(DTE));
+
+                        // Try to retrieve the project from the IVsHierarchy
+                        if (hierarchy is IVsProject vsProject)
+                        {
+                            // Use the GetProperty method to get the EnvDTE.Project object from the IVsHierarchy
+                            object projectObj = null;
+                            hierarchy.GetProperty(itemid, (int)__VSHPROPID.VSHPROPID_ExtObject, out projectObj);
+
+                            // Cast the object to an EnvDTE.Project
+                            EnvDTE.Project project = projectObj as EnvDTE.Project;
+                            return project;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                if (hierarchyPtr != IntPtr.Zero)
+                {
+                    Marshal.Release(hierarchyPtr);
+                }
+                if (selectionContainerPtr != IntPtr.Zero)
+                {
+                    Marshal.Release(selectionContainerPtr);
+                }
+            }
+
+            return null;
+        }
+
+
+        private void CleanAndRunDevices()
+        {
+
+        }
+
+
+        public void PromptToSaveUnsavedFiles()
+        {
+            DTE2 dte = (DTE2)Microsoft.VisualStudio.Shell.Package.GetGlobalService(typeof(DTE));
+
+            Documents documents = dte.Documents;
+
+            foreach (Document doc in documents)
+            {
+                if (doc.Saved == false)
+                {
+                    string message = $"The document '{doc.Name}' has unsaved changes. Do you want to save it?";
+                    MessageBoxResult result = System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, message), "Save Changes", MessageBoxButton.YesNoCancel);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        doc.Save();
+                    }
+                    else if (result == MessageBoxResult.Cancel)
+                    {
+                        return;
+                    }
+                }
+            }
+        }
+
+
+
+
     }
+
 }

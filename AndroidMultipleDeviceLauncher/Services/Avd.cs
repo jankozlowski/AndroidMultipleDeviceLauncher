@@ -1,6 +1,10 @@
-﻿using System.Diagnostics;
+﻿using AndroidMultipleDeviceLauncher.Models;
+using System.Collections.Generic;
+using System;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Media.Imaging;
 
 namespace AndroidMultipleDeviceLauncher.Services
 {
@@ -22,7 +26,6 @@ namespace AndroidMultipleDeviceLauncher.Services
                 cmd.StartInfo.UseShellExecute = false;
 
                 cmd.Start();
-                cmd.WaitForExit();
             }
         }
 
@@ -65,6 +68,36 @@ namespace AndroidMultipleDeviceLauncher.Services
 
             MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, "Avd not found at given path. Check if path is correct and contains emulator.exe"), "Adb not found");
             return false;
+        }
+
+        public List<Device> GetAvdEmulators()
+        {
+            List<Device> devices = new List<Device>();
+
+            string devicesAvdResult = AvdCommandWithResult("emulator -list-avds");
+            string[] lineResult = SplitByLine(devicesAvdResult);
+
+            foreach (string line in lineResult)
+            {
+                if (string.IsNullOrEmpty(line))
+                    continue;
+
+                Device device = new Device
+                {
+                    Name = line,
+                    TypeImage = new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/Desktop.png")),
+                    IsEmulator = true
+                };
+                devices.Add(device);
+            }
+
+            return devices;
+        }
+
+        private string[] SplitByLine(string text)
+        {
+            string[] lines = text.Split(new string[] { Environment.NewLine }, StringSplitOptions.None);
+            return lines;
         }
 
     }

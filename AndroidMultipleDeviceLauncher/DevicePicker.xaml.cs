@@ -1,8 +1,6 @@
 ﻿using AndroidMultipleDeviceLauncher.Services;
 using System.Collections.Generic;
-using System;
 using System.Windows;
-using System.Windows.Media.Imaging;
 using System.Linq;
 using System.IO;
 using System.Windows.Controls;
@@ -15,6 +13,7 @@ namespace AndroidMultipleDeviceLauncher
         private readonly Adb Adb;
         private readonly Avd Avd;
         private readonly Settings Settings;
+        private List<Device> CurrentlySelectedDevices;
 
         public DevicePicker()
         {
@@ -29,11 +28,49 @@ namespace AndroidMultipleDeviceLauncher
 
         public void LoadData()
         {
-            List<Device> connectedRealDevices = GetConnectedRealDevices();
-            List<Device> avdEmulators = GetAvdEmulators();
+            List<Device> connectedRealDevices = Adb.GetConnectedRealDevices();
+            List<Device> avdEmulators = Avd.GetAvdEmulators();
             List<Device> devices = connectedRealDevices.Concat(avdEmulators).ToList();
 
+            devices = CheckDevice(devices, SelectedDevicesSingelton.GetInstance().SelectedDevices);
+
             DeviceListView.ItemsSource = devices;
+        }
+
+        public void RefreshData()
+        {
+            List<Device> connectedRealDevices = Adb.GetConnectedRealDevices();
+            List<Device> avdEmulators = Avd.GetAvdEmulators();
+            List<Device> devices = connectedRealDevices.Concat(avdEmulators).ToList();
+
+            devices = CheckDevice(devices, CurrentlySelectedDevices);
+
+            DeviceListView.ItemsSource = devices;
+        }
+
+        private List<Device> CheckDevice(List<Device> foundDevices, List<Device> rememberedDevices)
+        {
+            foreach (Device device in rememberedDevices)
+            {
+                if (device.IsEmulator)
+                {
+                    var selectedDevice = foundDevices.Where(d => d.IsEmulator && d.Name.Equals(device.Name)).FirstOrDefault();
+                    if (selectedDevice != null)
+                    {
+                        selectedDevice.IsChecked = true;
+                    }
+                }
+                if (!device.IsEmulator)
+                {
+                    var selectedDevice = foundDevices.Where(d => !d.IsEmulator && d.Id.Equals(device.Id)).FirstOrDefault();
+                    if (selectedDevice != null)
+                    {
+                        selectedDevice.IsChecked = true;
+                    }
+                }
+            }
+
+            return foundDevices;
         }
 
         private void LoadSettings()
@@ -45,86 +82,6 @@ namespace AndroidMultipleDeviceLauncher
             string avdPath = Settings.GetSetting(Settings.SettingsName, "avdPath");
             if (!string.IsNullOrEmpty(avdPath))
                 AvdPathBox.Text = avdPath;
-        }
-
-        private List<Device> GetAvdEmulators()
-        {
-            List<Device> devices = new List<Device>();
-
-            string devicesAvdResult = Avd.AvdCommandWithResult("emulator -list-avds");
-            string[] lineResult = SplitByLine(devicesAvdResult);
-
-            foreach (string line in lineResult)
-            {
-                if (string.IsNullOrEmpty(line))
-                    continue;
-
-                Device device = new Device
-                {
-                    Name = line,
-                    TypeImage = new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/Desktop.png")),
-                    IsEmulator = true
-                };
-                devices.Add(device);
-            }
-
-            return devices;
-        }
-
-        private List<Device> GetConnectedRealDevices()
-        {
-            List<Device> devices = new List<Device>();
-
-            string devicesAdbResult = Adb.AdbCommandWithResult("devices -l");
-
-            string[] lineResult = SplitByLine(devicesAdbResult);
-
-            foreach (string line in lineResult.Skip(1))
-            {
-                if (string.IsNullOrEmpty(line))
-                    continue;
-
-                if (line.ToLower().Contains("emulator"))
-                    continue;
-
-                string[] parameters = line.Split();
-                Device device = new Device
-                {
-                    Id = parameters[0],
-                    TypeImage = new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/Phone.png"))
-                };
-                devices.Add(device);
-            }
-
-            foreach (Device device in devices)
-            {
-                string properties = Adb.AdbCommandWithResult($"-s {device.Id} shell getprop");
-                string[] propertieslines = SplitByLine(properties);
-                string avdNameLine = propertieslines.Where(l => l.Contains("ro.boot.qemu.avd_name")).FirstOrDefault();
-
-                if (string.IsNullOrEmpty(avdNameLine))
-                    avdNameLine = propertieslines.Where(l => l.Contains("ro.product.device")).FirstOrDefault();
-                if (string.IsNullOrEmpty(avdNameLine))
-                    avdNameLine = propertieslines.Where(l => l.Contains("ro.product.product.model")).FirstOrDefault();
-                if (string.IsNullOrEmpty(avdNameLine))
-                    avdNameLine = propertieslines.Where(l => l.Contains("ro.boot.hardware.sku")).FirstOrDefault();
-                if (string.IsNullOrEmpty(avdNameLine))
-                    avdNameLine = ":Unknown_Device";
-
-                string avdName = avdNameLine.Split(':')[1];
-                avdName = avdName.Trim().Replace("_", " ");
-                avdName = avdName.Substring(1, avdName.Length - 2);
-                avdName = avdName[0].ToString().ToUpper() + avdName.Substring(1);
-                device.Name = avdName;
-            }
-
-            return devices;
-        }
-
-        private string[] SplitByLine(string text)
-        {
-            string[] lines = text.Split(new string[] { Environment.NewLine }, StringSplitOptions.None);
-            return lines;
         }
 
         private void CheckAdbClick(object sender, RoutedEventArgs e)
@@ -173,7 +130,8 @@ namespace AndroidMultipleDeviceLauncher
 
         private void RefreshButtonClick(object sender, RoutedEventArgs e)
         {
-            LoadData();
+            CurrentlySelectedDevices = DeviceListView.ItemsSource.Cast<Device>().Where(d => d.IsChecked).ToList();
+            RefreshData();
         }
 
         private void OkButtonClick(object sender, RoutedEventArgs e)

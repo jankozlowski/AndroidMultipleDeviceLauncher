@@ -5,7 +5,10 @@ namespace AndroidMultipleDeviceLauncher.Services
 {
     public sealed class SelectedDevicesSingelton
     {
-        private SelectedDevicesSingelton() { }
+        private SelectedDevicesSingelton()
+        {
+            SelectedDevices = new List<Device>();
+        }
 
         private static SelectedDevicesSingelton _instance;
 
