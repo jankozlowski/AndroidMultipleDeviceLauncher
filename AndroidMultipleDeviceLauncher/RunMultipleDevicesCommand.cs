@@ -158,7 +158,7 @@ namespace AndroidMultipleDeviceLauncher
 
                 BuildSolution();
 
-                EnvDTE.Project project = GetActiveProject();
+                EnvDTE.Project project = GetStartupProject();
 
                 if (project == null)
                 {
@@ -268,7 +268,6 @@ namespace AndroidMultipleDeviceLauncher
 
             FileLogger fl = new FileLogger() { Parameters = @"logfile=C:\logs\log.txt" };
 
-
             var buildRequest = new BuildRequestData(projectPath, globalProperties, null, new[] { "Build" }, null);
             var buildParameters = new BuildParameters(projectCollection);
             buildParameters.Loggers = new List<Microsoft.Build.Framework.ILogger> { fl }.AsEnumerable();
@@ -285,7 +284,7 @@ namespace AndroidMultipleDeviceLauncher
             }
         }
 
-        public string GetCurrentSolution()
+        private string GetCurrentSolution()
         {
             IVsSolution solution = (IVsSolution)Microsoft.VisualStudio.Shell.Package.GetGlobalService(typeof(IVsSolution));
             solution.GetSolutionInfo(out string solutionDirectory, out string solutionName, out string solutionDirectory2);
@@ -293,58 +292,43 @@ namespace AndroidMultipleDeviceLauncher
             return solutionName;
         }
 
-        public EnvDTE.Project GetActiveProject()
+        private EnvDTE.Project GetStartupProject()
         {
-            // Get the required services
-            IVsMonitorSelection monitorSelection = (IVsMonitorSelection)Package.GetGlobalService(typeof(SVsShellMonitorSelection));
-            IntPtr hierarchyPtr = IntPtr.Zero;
-            IntPtr selectionContainerPtr = IntPtr.Zero;
-            IVsMultiItemSelect multiItemSelect = null;
-            uint itemid = VSConstants.VSITEMID_NIL;
+            string startupProjectPath = GetStartupProjectPath();
+            if (string.IsNullOrEmpty(startupProjectPath))
+                return null;
 
-            try
+            DTE2 dte = (DTE2)Microsoft.VisualStudio.Shell.Package.GetGlobalService(typeof(DTE));
+
+
+            EnvDTE.Solution solution = dte.Solution;
+
+            EnvDTE.Project targetProject = null;
+            foreach (EnvDTE.Project project in solution.Projects)
             {
-                // Get the current selection in Solution Explorer
-                if (monitorSelection.GetCurrentSelection(out hierarchyPtr, out itemid, out multiItemSelect, out selectionContainerPtr) == VSConstants.S_OK
-                    && itemid != VSConstants.VSITEMID_NIL
-                    && hierarchyPtr != IntPtr.Zero)
+                if (string.Equals(project.FullName, startupProjectPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    IVsHierarchy hierarchy = Marshal.GetObjectForIUnknown(hierarchyPtr) as IVsHierarchy;
-
-                    if (hierarchy != null)
-                    {
-                        // Get the DTE object, which represents Visual Studio's automation model
-                        DTE dte = (DTE)Package.GetGlobalService(typeof(DTE));
-
-                        // Try to retrieve the project from the IVsHierarchy
-                        if (hierarchy is IVsProject vsProject)
-                        {
-                            // Use the GetProperty method to get the EnvDTE.Project object from the IVsHierarchy
-                            object projectObj = null;
-                            hierarchy.GetProperty(itemid, (int)__VSHPROPID.VSHPROPID_ExtObject, out projectObj);
-
-                            // Cast the object to an EnvDTE.Project
-                            EnvDTE.Project project = projectObj as EnvDTE.Project;
-                            return project;
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                if (hierarchyPtr != IntPtr.Zero)
-                {
-                    Marshal.Release(hierarchyPtr);
-                }
-                if (selectionContainerPtr != IntPtr.Zero)
-                {
-                    Marshal.Release(selectionContainerPtr);
+                    targetProject = project;
+                    break;
                 }
             }
 
-            return null;
+            return targetProject;
         }
 
+        private string GetStartupProjectPath()
+        {
+            DTE2 dte = (DTE2)Microsoft.VisualStudio.Shell.Package.GetGlobalService(typeof(DTE));
+
+            SolutionBuild sb = dte.Solution.SolutionBuild;
+            string startupProjectPath = string.Empty;
+            foreach (String s in (Array)sb.StartupProjects)
+            {
+                startupProjectPath = s;
+            }
+            return Path.Combine(Environment.CurrentDirectory, startupProjectPath);
+        }
+    
 
         private void CleanAndRunDevices()
         {
