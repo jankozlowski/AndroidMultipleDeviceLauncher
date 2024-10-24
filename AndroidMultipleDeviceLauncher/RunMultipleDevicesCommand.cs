@@ -188,7 +188,7 @@ namespace AndroidMultipleDeviceLauncher
 
                 foreach (Device device in devices)
                 {
-                    string bootStatus = adb.AdbCommandWithResult($"adb -s {device.Id} shell getprop sys.boot_completed");
+                    string bootStatus = adb.AdbCommandWithResult($"-s {device.Id} shell getprop sys.boot_completed");
                     bool booted = bootStatus.Equals("1") ? true : false;
                     results.Add(booted);
                 }
@@ -203,7 +203,8 @@ namespace AndroidMultipleDeviceLauncher
             List<Device> devices = adb.GetConnectedDevices();
             foreach (Device device in devices)
             {
-                adb.AdbCommand($"adb -s {device.Id} install {apkPath}");
+                string res = adb.AdbCommandWithResult($@"-s {device.Id} install {apkPath}");
+                Console.WriteLine(res);
             }
         }
 
@@ -212,7 +213,7 @@ namespace AndroidMultipleDeviceLauncher
             List<Device> devices = adb.GetConnectedDevices();
             foreach (Device device in devices)
             {
-                adb.AdbCommand($"adb -s {device.Id}  shell am start -n < package_name >/< activity_name ");
+                adb.AdbCommand($"-s {device.Id}  shell am start -n < package_name >/< activity_name ");
             }
         }
 
@@ -229,8 +230,8 @@ namespace AndroidMultipleDeviceLauncher
             string projectPath = project.FullName.Substring(0, project.FullName.LastIndexOf("\\"));
             string buildPath = Path.Combine(projectPath, outputPath);
 
-            var files = Directory.GetFiles(buildPath, "*.apk").OrderBy(s => s).ToList();
-            string fullPath = files.First();
+            var files = Directory.GetFiles(buildPath, "*.apk").ToList();
+            string fullPath = files.Where(s => s.ToLower().Contains("signed")).First();
 
             ProjectConfiguration projectConfiguration = new ProjectConfiguration()
             {
@@ -328,7 +329,7 @@ namespace AndroidMultipleDeviceLauncher
             }
             return Path.Combine(Environment.CurrentDirectory, startupProjectPath);
         }
-    
+
 
         private void CleanAndRunDevices()
         {
