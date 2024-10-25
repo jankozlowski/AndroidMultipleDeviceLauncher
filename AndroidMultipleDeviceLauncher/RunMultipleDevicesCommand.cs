@@ -18,6 +18,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -25,6 +26,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Forms;
 using System.Windows.Threading;
+using System.Xml;
 using VSLangProj;
 using Task = System.Threading.Tasks.Task;
 
@@ -160,6 +162,7 @@ namespace AndroidMultipleDeviceLauncher
 
                 EnvDTE.Project project = GetStartupProject();
 
+
                 if (project == null)
                 {
                     string message = $"No startup project found, set android project as startup project";
@@ -171,9 +174,14 @@ namespace AndroidMultipleDeviceLauncher
 
                 CheckIfAllDevicesBooted();
                 InstallAppOnDevices(configuration.FullOutputPath);
-                // RunAppOnDevices();
+                RunAppOnDevices(configuration.PackageName, configuration.ActivityName);
                 //test on two themes
             });
+
+        }
+
+        private void CleanAndRunDevices()
+        {
 
         }
 
@@ -208,12 +216,12 @@ namespace AndroidMultipleDeviceLauncher
             }
         }
 
-        private void RunAppOnDevices()
+        private void RunAppOnDevices(string packageName, string activityName)
         {
             List<Device> devices = adb.GetConnectedDevices();
             foreach (Device device in devices)
             {
-                adb.AdbCommand($"-s {device.Id}  shell am start -n < package_name >/< activity_name ");
+                adb.AdbCommand($"-s {device.Id}  shell am start -n {packageName}/{activityName}");
             }
         }
 
@@ -233,28 +241,120 @@ namespace AndroidMultipleDeviceLauncher
             var files = Directory.GetFiles(buildPath, "*.apk").ToList();
             string fullPath = files.Where(s => s.ToLower().Contains("signed")).First();
 
+            var androidManifestFile = Directory.GetFiles(projectPath, "AndroidManifest.xml", SearchOption.AllDirectories);
+            androidManifestFile = androidManifestFile.Where(s => !s.Contains(@"\\bin") || !s.Contains(@"\\obj")).ToArray();
+            string androidId = GetPackageName(androidManifestFile[0]);
+
+            var MainActivityFile = Directory.GetFiles(projectPath, "MainActivity.cs", SearchOption.AllDirectories);
+            bool IsMainActivityMainLauncher = false;
+            if (MainActivityFile.Count() > 0)
+            {
+                IsMainActivityMainLauncher = CheckIfMainLauncer(MainActivityFile[0]);
+            }
+
+            string activityName = string.Empty;
+            if (IsMainActivityMainLauncher)
+            {
+                activityName = GetClassName(MainActivityFile[0]);
+            }
+            else
+            {
+                activityName = SearchMainLauncher(fullPath);
+            }
+
             ProjectConfiguration projectConfiguration = new ProjectConfiguration()
             {
                 Configuration = configuration,
                 Platform = platform,
                 OutputPath = outputPath,
                 FullOutputPath = fullPath,
-                //package name
-                //activity name
+                PackageName = androidId,
+                ActivityName = activityName,
             };
 
             return projectConfiguration;
         }
 
-        private class ProjectConfiguration
+        private string SearchMainLauncher(string projectPath)
         {
-            public string Configuration { get; set; }
-            public string Platform { get; set; }
+            string activityName = string.Empty;
+            var allFiles = Directory.GetFiles(projectPath, "*.*", SearchOption.AllDirectories);
 
-            public string OutputPath { get; set; }
+            foreach (var file in allFiles)
+            {
+                bool IsFileMainLauncher = CheckIfMainLauncer(file);
 
-            public string FullOutputPath { get; set; }
+                if (!IsFileMainLauncher)
+                    continue;
 
+                activityName = GetClassName(file);
+            }
+
+            return activityName;
+        }
+
+        private bool CheckIfMainLauncer(string mainActivityPath)
+        {
+            if (string.IsNullOrEmpty(mainActivityPath))
+                return false;
+
+            if (!File.Exists(mainActivityPath))
+                return false;
+
+            string fileContent = File.ReadAllText(mainActivityPath);
+            var mainLauncherRegex = new Regex(@"\[Activity\s*\(([^)]*MainLauncher\s*=\s*true[^)]*)\)\]");
+            var match = mainLauncherRegex.Match(fileContent);
+
+            if (match.Success)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        public string GetClassName(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+                return string.Empty;
+
+            if (!File.Exists(filePath))
+                return string.Empty;
+
+            string fileContent = File.ReadAllText(filePath);
+            var classPattern = new Regex(@"\b(class)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[{(]", RegexOptions.Singleline);
+            var match = classPattern.Match(fileContent);
+
+            return match.Success ? match.Groups[2].Value : string.Empty;
+        }
+
+        private string GetPackageName(string androidManifestPath)
+        {
+            if (string.IsNullOrEmpty(androidManifestPath))
+                return string.Empty;
+
+            XmlDocument doc = new XmlDocument();
+            doc.Load(androidManifestPath);
+
+            string result = string.Empty;
+            string appId = string.Empty;
+            string assemblyName = string.Empty;
+
+            var ApplicationIdTag = doc.GetElementsByTagName("ApplicationId");
+            if (ApplicationIdTag.Count > 0)
+            {
+                appId = ApplicationIdTag[0].InnerText;
+            }
+
+            var AssrmblyNameTag = doc.GetElementsByTagName("AssemblyName");
+            if (AssrmblyNameTag.Count > 0)
+            {
+                appId = AssrmblyNameTag[0].InnerText;
+            }
+
+            result = string.IsNullOrEmpty(appId) ? appId : assemblyName;
+
+            return result;
         }
 
         private bool BuildSolution()
@@ -330,13 +430,6 @@ namespace AndroidMultipleDeviceLauncher
             return Path.Combine(Environment.CurrentDirectory, startupProjectPath);
         }
 
-
-        private void CleanAndRunDevices()
-        {
-
-        }
-
-
         public void PromptToSaveUnsavedFiles()
         {
             DTE2 dte = (DTE2)Microsoft.VisualStudio.Shell.Package.GetGlobalService(typeof(DTE));
@@ -363,7 +456,20 @@ namespace AndroidMultipleDeviceLauncher
         }
 
 
+        private class ProjectConfiguration
+        {
+            public string Configuration { get; set; }
 
+            public string Platform { get; set; }
+
+            public string OutputPath { get; set; }
+
+            public string FullOutputPath { get; set; }
+
+            public string PackageName { get; set; }
+
+            public string ActivityName { get; set; }
+        }
 
     }
 
