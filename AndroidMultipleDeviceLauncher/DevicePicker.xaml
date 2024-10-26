@@ -30,6 +30,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"></RowDefinition>
                 <RowDefinition Height="Auto"></RowDefinition>
+                <RowDefinition Height="Auto"></RowDefinition>
             </Grid.RowDefinitions>
 
             <Grid.ColumnDefinitions>
@@ -45,6 +46,11 @@
             <TextBlock x:Name="labelAvdPath" Padding="10" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" TextAlignment="Center" HorizontalAlignment="Center" Text="Avd path:"></TextBlock>
             <TextBox x:Name="AvdPathBox" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.TextBoxStyleKey}}" Grid.Row="1" Grid.Column="1"  VerticalContentAlignment="Center" Text="C:\Program Files (x86)\Android\android-sdk\emulator\" TextChanged="AvdPathTextChanged"></TextBox>
             <Button x:Name="checkAvd" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}" Grid.Row="1" Grid.Column="2" Content="Check" Click="CheckAvdClick" />
+
+            <StackPanel Margin="15,10,10,0" Orientation="Horizontal" Grid.Row="2" Grid.ColumnSpan="3" HorizontalAlignment="Right" >
+                <CheckBox x:Name="BuildCheckBox"></CheckBox>
+                <TextBlock Margin="5,0,0,0" Text="Build solution"></TextBlock>
+            </StackPanel>
         </Grid>
 
         <TextBlock Grid.Row="1" Grid.Column="0" Text="" HorizontalAlignment="Left"/>

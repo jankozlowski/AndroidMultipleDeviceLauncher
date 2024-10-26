@@ -82,6 +82,11 @@ namespace AndroidMultipleDeviceLauncher
             string avdPath = Settings.GetSetting(Settings.SettingsName, "avdPath");
             if (!string.IsNullOrEmpty(avdPath))
                 AvdPathBox.Text = avdPath;
+
+            string buildCheckBoxString = Settings.GetSetting(Settings.SettingsName, "buildSolution");
+            bool buildCheckBoxBool = false;
+            bool.TryParse(buildCheckBoxString, out buildCheckBoxBool);
+            BuildCheckBox.IsChecked = buildCheckBoxBool;
         }
 
         private void CheckAdbClick(object sender, RoutedEventArgs e)
@@ -138,6 +143,7 @@ namespace AndroidMultipleDeviceLauncher
         {
             Settings.SaveSetting(Settings.SettingsName, "adbPath", AdbPathBox.Text);
             Settings.SaveSetting(Settings.SettingsName, "avdPath", AvdPathBox.Text);
+            Settings.SaveSetting(Settings.SettingsName, "buildSolution", BuildCheckBox.IsChecked.ToString());
 
             List<Device> selectedDevices = DeviceListView.Items.Cast<Device>().Where(d => d.IsChecked).ToList();
             SelectedDevicesSingelton.GetInstance().SelectedDevices = selectedDevices;

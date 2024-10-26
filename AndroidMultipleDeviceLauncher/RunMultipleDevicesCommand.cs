@@ -4,30 +4,16 @@ using EnvDTE;
 using EnvDTE80;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
-using Microsoft.Build.Framework;
-using Microsoft.Build.Locator;
 using Microsoft.Build.Logging;
-using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Documents;
-using System.Windows.Forms;
-using System.Windows.Threading;
 using System.Xml;
-using VSLangProj;
 using Task = System.Threading.Tasks.Task;
 
 namespace AndroidMultipleDeviceLauncher
@@ -110,8 +96,9 @@ namespace AndroidMultipleDeviceLauncher
         /// <param name="sender">Event sender.</param>
         /// <param name="e">Event args.</param>
 
-        Adb adb = new Adb();
-        Avd avd = new Avd();
+        private Adb adb = new Adb();
+        private Avd avd = new Avd();
+        private Settings settings = new Settings();
 
         private void Execute(object sender, EventArgs e)
         {
@@ -129,36 +116,7 @@ namespace AndroidMultipleDeviceLauncher
 
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                List<Device> runingDevices = adb.GetConnectedDevices();
-                List<Device> allAvds = avd.GetAvdEmulators();
-
-                foreach (var device in selectedDevices)
-                {
-                    if (device.IsEmulator)
-                    {
-                        if (runingDevices.FirstOrDefault(d => d.Name.Equals(device.Name)) != null)
-                            continue;
-
-                        if (allAvds.FirstOrDefault(d => d.Name.Equals(device.Name)) != null)
-                        {
-                            avd.AvdCommand($"-avd {device.Name}"); //run avd
-                        }
-                        else
-                        {
-                            SelectedDevicesSingelton.GetInstance().SelectedDevices.Remove(device);
-                        }
-                    }
-
-                    if (!device.IsEmulator)
-                    {
-                        if (runingDevices.FirstOrDefault(d => d.Id == device.Id) != null)
-                            continue;
-
-                        SelectedDevicesSingelton.GetInstance().SelectedDevices.Remove(device);
-                    }
-                }
-
-                BuildSolution();
+                RunDevices(selectedDevices);
 
                 EnvDTE.Project project = GetStartupProject();
 
@@ -170,24 +128,53 @@ namespace AndroidMultipleDeviceLauncher
                     return;
                 }
 
-                ProjectConfiguration configuration = GetProjectConfiguration(project);
-
                 CheckIfAllDevicesBooted();
+                BuildSolution();
+
+                ProjectConfiguration configuration = GetProjectConfiguration(project);
                 InstallAppOnDevices(configuration.FullOutputPath);
+                configuration.ActivityName = GetActivityName(configuration.PackageName);
                 RunAppOnDevices(configuration.PackageName, configuration.ActivityName);
-                //test on two themes
             });
 
         }
 
-        private void CleanAndRunDevices()
+        private void RunDevices(List<Device> selectedDevices)
         {
+            List<Device> runingDevices = adb.GetConnectedDevices();
+            List<Device> allAvds = avd.GetAvdEmulators();
 
+            foreach (var device in selectedDevices)
+            {
+                if (device.IsEmulator)
+                {
+                    if (runingDevices.FirstOrDefault(d => d.Name.Equals(device.Name)) != null)
+                        continue;
+
+                    if (allAvds.FirstOrDefault(d => d.Name.Equals(device.Name)) != null)
+                    {
+                        avd.AvdCommand($"-avd {device.Name}"); //run avd
+                    }
+                    else
+                    {
+                        SelectedDevicesSingelton.GetInstance().SelectedDevices.Remove(device);
+                    }
+                }
+
+                if (!device.IsEmulator)
+                {
+                    if (runingDevices.FirstOrDefault(d => d.Id == device.Id) != null)
+                        continue;
+
+                    SelectedDevicesSingelton.GetInstance().SelectedDevices.Remove(device);
+                }
+                System.Threading.Thread.Sleep(4000);
+            }
         }
 
         private void CheckIfAllDevicesBooted()
         {
-            bool AllBooted = true;
+            bool AllBooted = false;
             List<Device> devices = adb.GetConnectedDevices();
 
             while (!AllBooted)
@@ -197,7 +184,7 @@ namespace AndroidMultipleDeviceLauncher
                 foreach (Device device in devices)
                 {
                     string bootStatus = adb.AdbCommandWithResult($"-s {device.Id} shell getprop sys.boot_completed");
-                    bool booted = bootStatus.Equals("1") ? true : false;
+                    bool booted = bootStatus.Contains("1") ? true : false;
                     results.Add(booted);
                 }
 
@@ -221,7 +208,7 @@ namespace AndroidMultipleDeviceLauncher
             List<Device> devices = adb.GetConnectedDevices();
             foreach (Device device in devices)
             {
-                adb.AdbCommand($"-s {device.Id}  shell am start -n {packageName}/{activityName}");
+                adb.AdbCommand($"-s {device.Id}  shell am start -n {packageName}{activityName}");
             }
         }
 
@@ -233,7 +220,6 @@ namespace AndroidMultipleDeviceLauncher
             string configuration = activeConfig.ConfigurationName;
             string platform = activeConfig.PlatformName;
             string outputPath = activeConfig.Properties.Item("OutputPath").Value.ToString();
-            string packageName = project.Properties.Item("PackageName").Value.ToString();
 
             string projectPath = project.FullName.Substring(0, project.FullName.LastIndexOf("\\"));
             string buildPath = Path.Combine(projectPath, outputPath);
@@ -241,26 +227,8 @@ namespace AndroidMultipleDeviceLauncher
             var files = Directory.GetFiles(buildPath, "*.apk").ToList();
             string fullPath = files.Where(s => s.ToLower().Contains("signed")).First();
 
-            var androidManifestFile = Directory.GetFiles(projectPath, "AndroidManifest.xml", SearchOption.AllDirectories);
-            androidManifestFile = androidManifestFile.Where(s => !s.Contains(@"\\bin") || !s.Contains(@"\\obj")).ToArray();
-            string androidId = GetPackageName(androidManifestFile[0]);
-
-            var MainActivityFile = Directory.GetFiles(projectPath, "MainActivity.cs", SearchOption.AllDirectories);
-            bool IsMainActivityMainLauncher = false;
-            if (MainActivityFile.Count() > 0)
-            {
-                IsMainActivityMainLauncher = CheckIfMainLauncer(MainActivityFile[0]);
-            }
-
-            string activityName = string.Empty;
-            if (IsMainActivityMainLauncher)
-            {
-                activityName = GetClassName(MainActivityFile[0]);
-            }
-            else
-            {
-                activityName = SearchMainLauncher(fullPath);
-            }
+            var csproj = Directory.GetFiles(projectPath, "*.csproj").First();
+            string androidId = GetPackageName(csproj);
 
             ProjectConfiguration projectConfiguration = new ProjectConfiguration()
             {
@@ -268,73 +236,34 @@ namespace AndroidMultipleDeviceLauncher
                 Platform = platform,
                 OutputPath = outputPath,
                 FullOutputPath = fullPath,
-                PackageName = androidId,
-                ActivityName = activityName,
+                PackageName = androidId
             };
 
             return projectConfiguration;
         }
 
-        private string SearchMainLauncher(string projectPath)
+        private string GetActivityName(string packageName)
         {
-            string activityName = string.Empty;
-            var allFiles = Directory.GetFiles(projectPath, "*.*", SearchOption.AllDirectories);
-
-            foreach (var file in allFiles)
-            {
-                bool IsFileMainLauncher = CheckIfMainLauncer(file);
-
-                if (!IsFileMainLauncher)
-                    continue;
-
-                activityName = GetClassName(file);
-            }
+            string adbResult = adb.AdbCommandWithResult($"shell cmd package resolve-activity --brief {packageName}");
+            string[] lineResult = SplitByLine(adbResult);
+            string activityName = lineResult[1].Substring(lineResult[1].LastIndexOf("/"));
 
             return activityName;
         }
 
-        private bool CheckIfMainLauncer(string mainActivityPath)
+        private string[] SplitByLine(string text)
         {
-            if (string.IsNullOrEmpty(mainActivityPath))
-                return false;
-
-            if (!File.Exists(mainActivityPath))
-                return false;
-
-            string fileContent = File.ReadAllText(mainActivityPath);
-            var mainLauncherRegex = new Regex(@"\[Activity\s*\(([^)]*MainLauncher\s*=\s*true[^)]*)\)\]");
-            var match = mainLauncherRegex.Match(fileContent);
-
-            if (match.Success)
-            {
-                return true;
-            }
-
-            return false;
+            string[] lines = text.Split(new string[] { Environment.NewLine }, StringSplitOptions.None);
+            return lines;
         }
 
-        public string GetClassName(string filePath)
+        private string GetPackageName(string csProjectPath)
         {
-            if (string.IsNullOrEmpty(filePath))
-                return string.Empty;
-
-            if (!File.Exists(filePath))
-                return string.Empty;
-
-            string fileContent = File.ReadAllText(filePath);
-            var classPattern = new Regex(@"\b(class)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[{(]", RegexOptions.Singleline);
-            var match = classPattern.Match(fileContent);
-
-            return match.Success ? match.Groups[2].Value : string.Empty;
-        }
-
-        private string GetPackageName(string androidManifestPath)
-        {
-            if (string.IsNullOrEmpty(androidManifestPath))
+            if (string.IsNullOrEmpty(csProjectPath))
                 return string.Empty;
 
             XmlDocument doc = new XmlDocument();
-            doc.Load(androidManifestPath);
+            doc.Load(csProjectPath);
 
             string result = string.Empty;
             string appId = string.Empty;
@@ -349,16 +278,22 @@ namespace AndroidMultipleDeviceLauncher
             var AssrmblyNameTag = doc.GetElementsByTagName("AssemblyName");
             if (AssrmblyNameTag.Count > 0)
             {
-                appId = AssrmblyNameTag[0].InnerText;
+                assemblyName = AssrmblyNameTag[0].InnerText;
             }
 
-            result = string.IsNullOrEmpty(appId) ? appId : assemblyName;
+            result = string.IsNullOrEmpty(appId) ? assemblyName : appId;
 
             return result;
         }
 
         private bool BuildSolution()
         {
+            string buildCheckBoxString = settings.GetSetting(Settings.SettingsName, "buildSolution");
+            bool buildCheckBoxBool = false;
+            bool.TryParse(buildCheckBoxString, out buildCheckBoxBool);
+            if (!buildCheckBoxBool)
+                return true;
+
             string projectPath = GetCurrentSolution();
 
             if (string.IsNullOrEmpty(projectPath))
