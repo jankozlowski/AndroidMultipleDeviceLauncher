@@ -84,8 +84,8 @@ namespace AndroidMultipleDeviceLauncher.Services
 
                 Device device = new Device
                 {
-                    Name = line,
-                    TypeImage = new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/Desktop.png")),
+                    AvdName = line,
+                    TypeImage = VSSettings.DarkMode ? new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/DesktopWhite.png")) : new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/DesktopBlack.png")),
                     IsEmulator = true
                 };
                 devices.Add(device);

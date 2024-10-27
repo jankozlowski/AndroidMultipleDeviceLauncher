@@ -93,7 +93,7 @@ namespace AndroidMultipleDeviceLauncher.Services
                 {
                     Id = parameters[0],
                     IsEmulator = false,
-                    TypeImage = new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/Phone.png"))
+                    TypeImage = VSSettings.DarkMode ? new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/PhoneWhite.png")) : new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/PhoneBlack.png"))
                 };
                 devices.Add(device);
             }
@@ -101,10 +101,41 @@ namespace AndroidMultipleDeviceLauncher.Services
             foreach (Device device in devices)
             {
                 string avdName = GetDeviceName(device);
-                device.Name = avdName;
+                device.AdbName = avdName;
             }
 
             return devices;
+        }
+
+        public List<Device> GetConnectedSelectedDevices()
+        {
+            List<Device> selectedDevices = SelectedDevicesSingelton.GetInstance().SelectedDevices;
+            List<Device> connectedDevices = GetConnectedDevices();
+            List<Device> result = new List<Device>();
+
+            foreach (Device device in connectedDevices)
+            {
+                if (device.IsEmulator)
+                {
+                    var emulators = selectedDevices.Where(d => d.IsEmulator).ToList();
+                    var emulatorOnList = emulators.Where(e => e.AvdName.Equals(device.AvdName)).FirstOrDefault();
+                    if (emulatorOnList != null)
+                    {
+                        result.Add(device);
+                    }
+                }
+                if (!device.IsEmulator)
+                {
+                    var realDevices = selectedDevices.Where(d => !d.IsEmulator).ToList();
+                    var deviceOnList = realDevices.Where(e => e.Id.Equals(device.Id)).FirstOrDefault();
+                    if (deviceOnList != null)
+                    {
+                        result.Add(device);
+                    }
+                }
+            }
+
+            return result;
         }
 
         public List<Device> GetConnectedDevices()
@@ -125,18 +156,31 @@ namespace AndroidMultipleDeviceLauncher.Services
                 {
                     Id = parameters[0],
                     IsEmulator = line.ToLower().Contains("emulator"),
-                    TypeImage = line.ToLower().Contains("emulator") ? new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/Desktop.png")) : new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/Phone.png"))
+                    TypeImage = line.ToLower().Contains("emulator") ?
+                    VSSettings.DarkMode ? new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/DesktopWhite.png")) : new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/DesktopBlack.png")) :
+                    VSSettings.DarkMode ? new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/PhoneWhite.png")) : new BitmapImage(new Uri($"pack://application:,,,/{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name};component/Resources/PhoneBlack.png"))
                 };
                 devices.Add(device);
             }
 
             foreach (Device device in devices)
             {
-                string avdName = GetDeviceName(device);
-                device.Name = avdName;
+                string adbName = GetDeviceName(device);
+                device.AdbName = adbName;
+                if (device.IsEmulator)
+                {
+                    device.AvdName = GetAvdName(device);
+                }
             }
 
             return devices;
+        }
+
+        private string GetAvdName(Device device)
+        {
+            var adbName = AdbCommandWithResult($"-s {device.Id} emu avd name");
+            var result = SplitByLine(adbName);
+            return result[0].Trim();
         }
 
         private string GetDeviceName(Device device)

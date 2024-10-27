@@ -5,6 +5,7 @@ using EnvDTE80;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Logging;
+using Microsoft.VisualStudio.RpcContracts.Build;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using System;
@@ -12,6 +13,7 @@ using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Windows;
 using System.Xml;
 using Task = System.Threading.Tasks.Task;
@@ -27,7 +29,7 @@ namespace AndroidMultipleDeviceLauncher
         /// Command ID.
         /// </summary>
         public const int CommandId = 0x0100;
-
+        public const int CommandId2 = 0x0300;
         /// <summary>
         /// Command menu group (command set GUID).
         /// </summary>
@@ -52,6 +54,10 @@ namespace AndroidMultipleDeviceLauncher
             var menuCommandID = new CommandID(CommandSet, CommandId);
             var menuItem = new MenuCommand(this.Execute, menuCommandID);
             commandService.AddCommand(menuItem);
+
+            var menuCommandID2 = new CommandID(CommandSet, CommandId2);
+            var menuItem2 = new MenuCommand(this.Execute, menuCommandID2);
+            commandService.AddCommand(menuItem2);
         }
 
         /// <summary>
@@ -112,31 +118,112 @@ namespace AndroidMultipleDeviceLauncher
                 return;
             }
 
-            //add loading
-
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            using (var loadingDialog = new LoadingDialog(cancellationTokenSource))
             {
-                RunDevices(selectedDevices);
-
-                EnvDTE.Project project = GetStartupProject();
-
-
-                if (project == null)
+                _ = Task.Run(() =>
                 {
-                    string message = $"No startup project found, set android project as startup project";
-                    MessageBoxResult result = System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, message), "No startup project found", MessageBoxButton.OK);
-                    return;
+                    try
+                    {
+                        RunDevices(selectedDevices);
+
+                        if (cancellationTokenSource.IsCancellationRequested)
+                            return;
+
+                        UpdateSingeltoneAdbNames();
+
+                        EnvDTE.Project project = GetStartupProject();
+
+                        if (project == null)
+                        {
+                            string message = $"No startup project found, set android project as startup project";
+                            MessageBoxResult result = System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, message), "No startup project found", MessageBoxButton.OK);
+                            loadingDialog.Dispose();
+                            return;
+                        }
+
+                        loadingDialog.SetMessage("Waiting for all devices to boot");
+                        CheckIfAllDevicesBooted(cancellationTokenSource);
+
+                        if (cancellationTokenSource.IsCancellationRequested)
+                            return;
+
+                        loadingDialog.SetMessage("Building project");
+                        BuildSolution(cancellationTokenSource);
+
+                        if (cancellationTokenSource.IsCancellationRequested)
+                            return;
+
+                        loadingDialog.SetMessage("Geting project data");
+                        ProjectConfiguration configuration = GetProjectConfiguration(project);
+
+                        if (cancellationTokenSource.IsCancellationRequested)
+                            return;
+
+                        loadingDialog.SetMessage("Installing app on devices");
+
+                        if (string.IsNullOrEmpty(configuration.FullOutputPath) || !File.Exists(configuration.FullOutputPath))
+                        {
+                            string message = $"No apk file found in path {configuration.FullOutputPath} build project to create apk file";
+                            MessageBoxResult result = System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, message), "No apk found", MessageBoxButton.OK);
+                            loadingDialog.Dispose();
+                            return;
+                        }
+
+                        InstallAppOnDevices(configuration.FullOutputPath);
+
+                        if (cancellationTokenSource.IsCancellationRequested)
+                            return;
+
+                        loadingDialog.SetMessage("Geting start activity");
+                        configuration.ActivityName = GetActivityName(configuration.PackageName);
+
+                        if (cancellationTokenSource.IsCancellationRequested)
+                            return;
+
+                        loadingDialog.SetMessage("Starting app on devices");
+                        RunAppOnDevices(configuration.PackageName, configuration.ActivityName);
+
+                        if (cancellationTokenSource.IsCancellationRequested)
+                            return;
+
+                        loadingDialog.Dispose();
+                        return;
+                    }
+                    catch (CancelationException ex)
+                    {
+                        loadingDialog.Dispose();
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        loadingDialog.Dispose();
+                        System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, ex.Message), "Error", MessageBoxButton.OK);
+                        return;
+                    }
+
+                });
+
+                loadingDialog.SetMessage("Running selected devices");
+                loadingDialog.ShowDialog();
+            }
+
+        }
+
+        private void UpdateSingeltoneAdbNames()
+        {
+            List<Device> selectedDevices = SelectedDevicesSingelton.GetInstance().SelectedDevices;
+            List<Device> connectedDevices = adb.GetConnectedDevices();
+            foreach (Device device in connectedDevices)
+            {
+                var selectedDevice = selectedDevices.Where(d => d.AvdName.Equals(device.AvdName)).FirstOrDefault();
+                if (selectedDevice != null)
+                {
+                    var adbName = adb.AdbCommandWithResult($"-s {device.Id} emu avd name");
+                    var result = SplitByLine(adbName);
+                    selectedDevice.AdbName = result[0].Trim();
                 }
-
-                CheckIfAllDevicesBooted();
-                BuildSolution();
-
-                ProjectConfiguration configuration = GetProjectConfiguration(project);
-                InstallAppOnDevices(configuration.FullOutputPath);
-                configuration.ActivityName = GetActivityName(configuration.PackageName);
-                RunAppOnDevices(configuration.PackageName, configuration.ActivityName);
-            });
-
+            }
         }
 
         private void RunDevices(List<Device> selectedDevices)
@@ -148,12 +235,13 @@ namespace AndroidMultipleDeviceLauncher
             {
                 if (device.IsEmulator)
                 {
-                    if (runingDevices.FirstOrDefault(d => d.Name.Equals(device.Name)) != null)
+                    if (runingDevices.FirstOrDefault(d => d.AdbName.Equals(device.AdbName)) != null)
                         continue;
 
-                    if (allAvds.FirstOrDefault(d => d.Name.Equals(device.Name)) != null)
+                    if (allAvds.FirstOrDefault(d => d.AvdName.Equals(device.AvdName)) != null)
                     {
-                        avd.AvdCommand($"-avd {device.Name}"); //run avd
+                        avd.AvdCommand($"-avd {device.AvdName}"); //run avd
+                        System.Threading.Thread.Sleep(4000);
                     }
                     else
                     {
@@ -168,14 +256,15 @@ namespace AndroidMultipleDeviceLauncher
 
                     SelectedDevicesSingelton.GetInstance().SelectedDevices.Remove(device);
                 }
-                System.Threading.Thread.Sleep(4000);
             }
+
+            System.Threading.Thread.Sleep(1000);
         }
 
-        private void CheckIfAllDevicesBooted()
+        private void CheckIfAllDevicesBooted(CancellationTokenSource cancellationTokenSource)
         {
             bool AllBooted = false;
-            List<Device> devices = adb.GetConnectedDevices();
+            List<Device> devices = adb.GetConnectedSelectedDevices();
 
             while (!AllBooted)
             {
@@ -190,22 +279,24 @@ namespace AndroidMultipleDeviceLauncher
 
                 AllBooted = results.All(item => item);
                 System.Threading.Thread.Sleep(1000);
+
+                if (cancellationTokenSource.IsCancellationRequested)
+                    throw new CancelationException();
             }
         }
 
         private void InstallAppOnDevices(string apkPath)
         {
-            List<Device> devices = adb.GetConnectedDevices();
+            List<Device> devices = adb.GetConnectedSelectedDevices();
             foreach (Device device in devices)
             {
-                string res = adb.AdbCommandWithResult($@"-s {device.Id} install {apkPath}");
-                Console.WriteLine(res);
+                adb.AdbCommandWithResult($@"-s {device.Id} install {apkPath}");
             }
         }
 
         private void RunAppOnDevices(string packageName, string activityName)
         {
-            List<Device> devices = adb.GetConnectedDevices();
+            List<Device> devices = adb.GetConnectedSelectedDevices();
             foreach (Device device in devices)
             {
                 adb.AdbCommand($"-s {device.Id}  shell am start -n {packageName}{activityName}");
@@ -225,7 +316,7 @@ namespace AndroidMultipleDeviceLauncher
             string buildPath = Path.Combine(projectPath, outputPath);
 
             var files = Directory.GetFiles(buildPath, "*.apk").ToList();
-            string fullPath = files.Where(s => s.ToLower().Contains("signed")).First();
+            string fullPath = files.Where(s => s.ToLower().Contains("signed")).FirstOrDefault();
 
             var csproj = Directory.GetFiles(projectPath, "*.csproj").First();
             string androidId = GetPackageName(csproj);
@@ -244,7 +335,9 @@ namespace AndroidMultipleDeviceLauncher
 
         private string GetActivityName(string packageName)
         {
-            string adbResult = adb.AdbCommandWithResult($"shell cmd package resolve-activity --brief {packageName}");
+            List<Device> devices = adb.GetConnectedSelectedDevices();
+
+            string adbResult = adb.AdbCommandWithResult($"-s {devices.First().Id} shell cmd package resolve-activity --brief {packageName}");
             string[] lineResult = SplitByLine(adbResult);
             string activityName = lineResult[1].Substring(lineResult[1].LastIndexOf("/"));
 
@@ -286,7 +379,7 @@ namespace AndroidMultipleDeviceLauncher
             return result;
         }
 
-        private bool BuildSolution()
+        private bool BuildSolution(CancellationTokenSource cancellationTokenSource)
         {
             string buildCheckBoxString = settings.GetSetting(Settings.SettingsName, "buildSolution");
             bool buildCheckBoxBool = false;
@@ -294,30 +387,64 @@ namespace AndroidMultipleDeviceLauncher
             if (!buildCheckBoxBool)
                 return true;
 
-            string projectPath = GetCurrentSolution();
+            string projectPath = GetStartupProjectPath();
 
             if (string.IsNullOrEmpty(projectPath))
                 return false;
 
-            var projectCollection = new ProjectCollection();
-            var globalProperties = projectCollection.GlobalProperties;
+           // CleanSolution(projectPath, cancellationTokenSource);
+           // BuildManager.DefaultBuildManager.EndBuild();
 
-            FileLogger fl = new FileLogger() { Parameters = @"logfile=C:\logs\log.txt" };
 
-            var buildRequest = new BuildRequestData(projectPath, globalProperties, null, new[] { "Build" }, null);
-            var buildParameters = new BuildParameters(projectCollection);
+            var buildResult = BuildAction(projectPath, "Build");
+            BuildManager.DefaultBuildManager.EndBuild();
+
+            while (!cancellationTokenSource.IsCancellationRequested)
+            {
+                System.Threading.Thread.Sleep(500);
+                if (buildResult.OverallResult == BuildResultCode.Success)
+                    return true;
+
+                if (buildResult.OverallResult == BuildResultCode.Failure)
+                    return false;
+            }
+
+            if (cancellationTokenSource.IsCancellationRequested)
+                throw new CancelationException();
+
+            return true;
+        }
+
+        private void CleanSolution(string projectPath, CancellationTokenSource cancellationTokenSource)
+        {
+            var buildResult = BuildAction(projectPath, "Clean");
+
+            while (!cancellationTokenSource.IsCancellationRequested)
+            {
+                System.Threading.Thread.Sleep(500);
+                if (buildResult.OverallResult == BuildResultCode.Success)
+                    return;
+
+                if (buildResult.OverallResult == BuildResultCode.Failure)
+                    return;
+            }
+
+            if (cancellationTokenSource.IsCancellationRequested)
+                throw new CancelationException();
+        }
+
+        private Microsoft.Build.Execution.BuildResult BuildAction(string projectPath, string buildAction)
+        {
+            Microsoft.Build.Evaluation.Project project = new Microsoft.Build.Evaluation.Project(projectPath);
+            var globalProperties = project.GlobalProperties;
+
+            var buildRequest = new BuildRequestData(projectPath, globalProperties, null, new[] { buildAction }, null);
+            var buildParameters = new BuildParameters(project.ProjectCollection);
+            string logPath = projectPath.Substring(0, projectPath.LastIndexOf("\\"));
+            FileLogger fl = new FileLogger() { Parameters = $@"logfile={logPath}\log.txt" };
             buildParameters.Loggers = new List<Microsoft.Build.Framework.ILogger> { fl }.AsEnumerable();
-
-            var buildResult = Microsoft.Build.Execution.BuildManager.DefaultBuildManager.Build(buildParameters, buildRequest);
-
-            if (buildResult.OverallResult == BuildResultCode.Success)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
+            BuildManager.DefaultBuildManager.BeginBuild(buildParameters);
+            return BuildManager.DefaultBuildManager.Build(buildParameters, buildRequest);
         }
 
         private string GetCurrentSolution()
@@ -364,32 +491,6 @@ namespace AndroidMultipleDeviceLauncher
             }
             return Path.Combine(Environment.CurrentDirectory, startupProjectPath);
         }
-
-        public void PromptToSaveUnsavedFiles()
-        {
-            DTE2 dte = (DTE2)Microsoft.VisualStudio.Shell.Package.GetGlobalService(typeof(DTE));
-
-            Documents documents = dte.Documents;
-
-            foreach (Document doc in documents)
-            {
-                if (doc.Saved == false)
-                {
-                    string message = $"The document '{doc.Name}' has unsaved changes. Do you want to save it?";
-                    MessageBoxResult result = System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, message), "Save Changes", MessageBoxButton.YesNoCancel);
-
-                    if (result == MessageBoxResult.Yes)
-                    {
-                        doc.Save();
-                    }
-                    else if (result == MessageBoxResult.Cancel)
-                    {
-                        return;
-                    }
-                }
-            }
-        }
-
 
         private class ProjectConfiguration
         {

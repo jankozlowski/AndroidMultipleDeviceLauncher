@@ -69,7 +69,7 @@
                         </Grid.ColumnDefinitions>
                         <CheckBox Grid.Column="0" VerticalContentAlignment="Center" HorizontalAlignment="Center" IsChecked="{Binding IsChecked}"/>
                         <Image Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center" Width="16" Height="16" Source="{Binding TypeImage}"/>
-                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="{Binding Name}"/>
+                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="{Binding AvdName}"/>
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>

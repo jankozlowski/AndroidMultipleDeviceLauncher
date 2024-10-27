@@ -1,9 +1,13 @@
 ﻿using AndroidMultipleDeviceLauncher.Services;
-using Microsoft.Build.Locator;
+using EnvDTE;
+using EnvDTE80;
 using Microsoft.VisualStudio.Shell;
+using Sentry;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Windows;
+using System.Windows.Media;
 using Task = System.Threading.Tasks.Task;
 
 namespace AndroidMultipleDeviceLauncher
@@ -46,8 +50,6 @@ namespace AndroidMultipleDeviceLauncher
         /// <returns>A task representing the async work of package initialization, or an already completed task if there is none. Do not return null from this method.</returns>
         protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
         {
-            // When initialized asynchronously, the current thread may be a background thread at this point.
-            // Do any initialization that requires the UI thread after switching to the UI thread.
             await this.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
             await RunMultipleDevicesCommand.InitializeAsync(this);
             await RunMultipleDevicesSettingsCommand.InitializeAsync(this);
@@ -59,6 +61,45 @@ namespace AndroidMultipleDeviceLauncher
 
             Adb.AdbPath = string.IsNullOrEmpty(adbPath) ? @"C:\Program Files (x86)\Android\android-sdk\platform-tools\" : adbPath;
             Avd.AvdPath = string.IsNullOrEmpty(avdPath) ? @"C:\Program Files (x86)\Android\android-sdk\emulator\" : avdPath;
+
+            SentrySdk.Init(o =>
+            {
+                o.Dsn = "https://f75b9ebc93000f010dec9a3ad92a5c91@o4508195271147520.ingest.de.sentry.io/4508195273375824";
+                o.Debug = false;
+            });
+            AppDomain.CurrentDomain.UnhandledException += CurrentDomainUnhandledException;
+        }
+
+        private void CurrentDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            Exception exception = e.ExceptionObject as Exception;
+            SentrySdk.CaptureException(exception);
+            PromptToSaveUnsavedFiles();
+        }
+
+        public void PromptToSaveUnsavedFiles()
+        {
+            DTE2 dte = (DTE2)Microsoft.VisualStudio.Shell.Package.GetGlobalService(typeof(DTE));
+
+            Documents documents = dte.Documents;
+
+            foreach (Document doc in documents)
+            {
+                if (doc.Saved == false)
+                {
+                    string message = $"The document '{doc.Name}' has unsaved changes. Do you want to save it?";
+                    MessageBoxResult result = System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, message), "Save Changes", MessageBoxButton.YesNoCancel);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        doc.Save();
+                    }
+                    else if (result == MessageBoxResult.Cancel)
+                    {
+                        return;
+                    }
+                }
+            }
         }
 
         #endregion

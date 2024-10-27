@@ -68,11 +68,8 @@
 				<Parent guid="guidAndroidMultipleDeviceLauncherPackageCmdSet" id="ToolbarGroup" />
 				<Icon guid="playImages" id="play" />
 				<Strings>
-					<ButtonText>Run Multiple Devices</ButtonText>
 					<CommandName>Run Multiple Devices</CommandName>
-					<MenuText>Run Multiple Devices</MenuText>
 					<ToolTipText>Run Multiple Devices</ToolTipText>
-					<CanonicalName>Run Multiple Devices</CanonicalName>
 				</Strings>
 
 			</Button>
@@ -107,7 +104,7 @@
             inside a button definition. An important aspect of this declaration is that the element id
             must be the actual index (1-based) of the bitmap inside the bitmap strip. -->
 			<Bitmap guid="playImages" href="Resources\PlayIcon.png" usedList="play" />
-			<Bitmap guid="settingsImages" href="Resources\SlidersIcon.png" usedList="sliders" />
+			<Bitmap guid="settingsImages" href="Resources\Cogs.png" usedList="sliders" />
 
 		</Bitmaps>
 	</Commands>

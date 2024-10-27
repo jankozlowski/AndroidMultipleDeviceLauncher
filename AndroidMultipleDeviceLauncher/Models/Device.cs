@@ -12,7 +12,9 @@ namespace AndroidMultipleDeviceLauncher.Models
 
         public ImageSource TypeImage { get; set; }
 
-        public string Name { get; set; }
+        public string AvdName { get; set; }
+
+        public string AdbName { get; set; }
 
     }
 }

@@ -5,6 +5,8 @@ using System.Linq;
 using System.IO;
 using System.Windows.Controls;
 using AndroidMultipleDeviceLauncher.Models;
+using Microsoft.VisualStudio.Shell;
+using System.Windows.Media;
 
 namespace AndroidMultipleDeviceLauncher
 {
@@ -21,6 +23,9 @@ namespace AndroidMultipleDeviceLauncher
             Adb = new Adb();
             Avd = new Avd();
             Settings = new Settings();
+
+            SolidColorBrush systemColor = (SolidColorBrush)FindResource(VsBrushes.WindowTextKey);
+            VSSettings.DarkMode = systemColor.Color.ToString().Equals("#FFFAFAFA");
 
             LoadSettings();
             LoadData();
@@ -54,7 +59,7 @@ namespace AndroidMultipleDeviceLauncher
             {
                 if (device.IsEmulator)
                 {
-                    var selectedDevice = foundDevices.Where(d => d.IsEmulator && d.Name.Equals(device.Name)).FirstOrDefault();
+                    var selectedDevice = foundDevices.Where(d => d.IsEmulator && d.AvdName.Equals(device.AvdName)).FirstOrDefault();
                     if (selectedDevice != null)
                     {
                         selectedDevice.IsChecked = true;
