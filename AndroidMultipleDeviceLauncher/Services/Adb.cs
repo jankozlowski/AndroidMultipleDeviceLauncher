@@ -102,6 +102,7 @@ namespace AndroidMultipleDeviceLauncher.Services
             {
                 string avdName = GetDeviceName(device);
                 device.AdbName = avdName;
+                device.AvdName = avdName;
             }
 
             return devices;

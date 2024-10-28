@@ -164,7 +164,7 @@ namespace AndroidMultipleDeviceLauncher
 
                         if (string.IsNullOrEmpty(configuration.FullOutputPath) || !File.Exists(configuration.FullOutputPath))
                         {
-                            string message = $"No apk file found in path {configuration.FullOutputPath} build project to create apk file";
+                            string message = $"No apk file found in path {configuration.FullOutputPath}, build project to create apk file";
                             MessageBoxResult result = System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, message), "No apk found", MessageBoxButton.OK);
                             loadingDialog.Dispose();
                             return;
@@ -392,12 +392,11 @@ namespace AndroidMultipleDeviceLauncher
             if (string.IsNullOrEmpty(projectPath))
                 return false;
 
-           // CleanSolution(projectPath, cancellationTokenSource);
-           // BuildManager.DefaultBuildManager.EndBuild();
+            BuildAction(projectPath, "Restore");
 
+            CleanSolution(projectPath, cancellationTokenSource);
 
             var buildResult = BuildAction(projectPath, "Build");
-            BuildManager.DefaultBuildManager.EndBuild();
 
             while (!cancellationTokenSource.IsCancellationRequested)
             {
@@ -406,7 +405,10 @@ namespace AndroidMultipleDeviceLauncher
                     return true;
 
                 if (buildResult.OverallResult == BuildResultCode.Failure)
+                {
+                    System.Windows.MessageBox.Show(string.Format(System.Globalization.CultureInfo.CurrentUICulture, "Build failed"), "Error", MessageBoxButton.OK);
                     return false;
+                }
             }
 
             if (cancellationTokenSource.IsCancellationRequested)
@@ -435,15 +437,22 @@ namespace AndroidMultipleDeviceLauncher
 
         private Microsoft.Build.Execution.BuildResult BuildAction(string projectPath, string buildAction)
         {
+            var projectCollection = ProjectCollection.GlobalProjectCollection;
+            var existingProject = projectCollection.LoadedProjects.FirstOrDefault(p => p.FullPath.Equals(projectPath, StringComparison.OrdinalIgnoreCase));
+
+            if (existingProject != null)
+            {
+                projectCollection.UnloadProject(existingProject);
+            }
+
             Microsoft.Build.Evaluation.Project project = new Microsoft.Build.Evaluation.Project(projectPath);
             var globalProperties = project.GlobalProperties;
 
             var buildRequest = new BuildRequestData(projectPath, globalProperties, null, new[] { buildAction }, null);
             var buildParameters = new BuildParameters(project.ProjectCollection);
-            string logPath = projectPath.Substring(0, projectPath.LastIndexOf("\\"));
-            FileLogger fl = new FileLogger() { Parameters = $@"logfile={logPath}\log.txt" };
-            buildParameters.Loggers = new List<Microsoft.Build.Framework.ILogger> { fl }.AsEnumerable();
-            BuildManager.DefaultBuildManager.BeginBuild(buildParameters);
+            /*  string logPath = projectPath.Substring(0, projectPath.LastIndexOf("\\"));
+              FileLogger fl = new FileLogger() { Parameters = $@"logfile={logPath}\log.txt" };
+              buildParameters.Loggers = new List<Microsoft.Build.Framework.ILogger> { fl }.AsEnumerable();*/
             return BuildManager.DefaultBuildManager.Build(buildParameters, buildRequest);
         }
 

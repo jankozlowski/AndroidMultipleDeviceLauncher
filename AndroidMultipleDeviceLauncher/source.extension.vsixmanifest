@@ -6,7 +6,7 @@
         <Description xml:space="preserve">Tool for uploading android apk file to multiple devices at once.</Description>
         <MoreInfo>https://github.com/jankozlowski/AndroidMultipleDeviceLauncher</MoreInfo>
         <License>Resources\license.txt</License>
-        <Icon>Resources\logo.png</Icon>
+        <Icon>Resources\preview.png</Icon>
         <PreviewImage>Resources\preview.png</PreviewImage>
         <Tags>android, xamarin, maui, emulator, device, apk, upload</Tags>
     </Metadata>
